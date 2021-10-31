@@ -107,7 +107,13 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   /*DOS START*/
-  // trace system call
+  // mask from trace system call (0 by default)
   int trace_mask;
+  // number of ticks
+  int n_ticks;
+  // waitx
+  uint rtime; // How long the process ran for
+  uint ctime; // When was the process created
+  uint etime; // When did the process exited
   /*DOS END*/
 };

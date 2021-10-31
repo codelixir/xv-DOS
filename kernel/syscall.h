@@ -22,4 +22,5 @@
 #define SYS_close 21
 /* DOS START */
 #define SYS_trace 22
+#define SYS_waitx 23
 /* DOS END */

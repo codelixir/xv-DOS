@@ -126,6 +126,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->n_ticks = ticks;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0)
@@ -149,6 +150,9 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+  p->rtime = 0;
+  p->etime = 0;
+  p->ctime = ticks;
 
   return p;
 }
@@ -389,6 +393,7 @@ void exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+  p->etime = ticks;
 
   release(&wait_lock);
 
@@ -451,6 +456,76 @@ int wait(uint64 addr)
   }
 }
 
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int waitx(uint64 addr, uint *rtime, uint *wtime)
+{
+  struct proc *np;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for (;;)
+  {
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for (np = proc; np < &proc[NPROC]; np++)
+    {
+      if (np->parent == p)
+      {
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&np->lock);
+
+        havekids = 1;
+        if (np->state == ZOMBIE)
+        {
+          // Found one.
+          pid = np->pid;
+          *rtime = np->rtime;
+          *wtime = np->etime - np->ctime - np->rtime;
+          if (addr != 0 && copyout(p->pagetable, addr, (char *)&np->xstate,
+                                   sizeof(np->xstate)) < 0)
+          {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(np);
+          release(&np->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&np->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if (!havekids || p->killed)
+    {
+      release(&wait_lock);
+      return -1;
+    }
+
+    // Wait for a child to exit.
+    sleep(p, &wait_lock); //DOC: wait-sleep
+  }
+}
+
+void update_time()
+{
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if (p->state == RUNNING)
+    {
+      p->rtime++;
+    }
+    release(&p->lock);
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -462,8 +537,9 @@ void scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-
   c->proc = 0;
+
+#ifdef RR
   for (;;)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -488,6 +564,54 @@ void scheduler(void)
       release(&p->lock);
     }
   }
+
+#elif defined(FCFS)
+  struct proc *p_least_time = proc;
+  for (;;)
+  {
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
+
+    // minimum time
+    int found = 0;
+    int min_ticks = -1;
+
+    for (p = proc; p < &proc[NPROC]; p++)
+    {
+      // find the process with the least time
+      if (p->state == RUNNABLE)
+      {
+        if (!found)
+        {
+          min_ticks = p->n_ticks;
+          p_least_time = p;
+          found = 1;
+        }
+        if (p->n_ticks < min_ticks)
+        {
+          min_ticks = p->n_ticks;
+          p_least_time = p;
+        }
+      }
+
+      acquire(&p_least_time->lock);
+      if (p_least_time->state == RUNNABLE)
+      {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p_least_time->state = RUNNING;
+        c->proc = p_least_time;
+        swtch(&c->context, &p_least_time->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p_least_time->lock);
+    }
+  }
+#endif
 }
 
 // Switch to scheduler.  Must hold only p->lock

@@ -102,6 +102,7 @@ extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 /* DOS START */
 extern uint64 sys_trace(void);
+extern uint64 sys_waitx(void);
 /* DOS END */
 
 static uint64 (*syscalls[])(void) = {
@@ -128,6 +129,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_close] sys_close,
     /* DOS START */
     [SYS_trace] sys_trace,
+    [SYS_waitx] sys_waitx,
     /* DOS END */
 };
 
@@ -155,6 +157,7 @@ char *syscall_name[] = {
     [SYS_mkdir] "mkdir",
     [SYS_close] "close",
     [SYS_trace] "trace",
+    [SYS_waitx] "waitx",
 };
 
 int syscall_argc[] = {
@@ -180,6 +183,7 @@ int syscall_argc[] = {
     [SYS_mkdir] 2,
     [SYS_close] 1,
     [SYS_trace] 1,
+    [SYS_waitx] 3,
 };
 /* DOS END */
 
