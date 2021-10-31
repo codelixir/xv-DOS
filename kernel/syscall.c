@@ -179,7 +179,7 @@ int syscall_argc[] = {
     [SYS_link] 2,
     [SYS_mkdir] 2,
     [SYS_close] 1,
-    [SYS_trace] 0,
+    [SYS_trace] 1,
 };
 /* DOS END */
 
@@ -192,18 +192,21 @@ void syscall(void)
 
   /*DOS START*/
   int tracing = 0;
-  if ((1 << num) & p->trace_mask)
-    tracing = 1;
 
   if (num > 0 && num < NELEM(syscalls) && syscalls[num])
   {
-    if (tracing)
-      printf("%d: syscall %s (", p->pid, syscall_name[num]);
     int argc = syscall_argc[num];
+    int arg_0 = p->trapframe->a0;
+    p->trapframe->a0 = syscalls[num]();
+
+    if ((1 << num) & p->trace_mask)
+      tracing = 1;
+
     if (tracing)
     {
+      printf("%d: syscall %s (", p->pid, syscall_name[num]);
       if (argc >= 1)
-        printf("%d", p->trapframe->a0);
+        printf("%d", arg_0);
       if (argc >= 2)
         printf(" %d", p->trapframe->a1);
       if (argc >= 3)
@@ -215,10 +218,9 @@ void syscall(void)
       if (argc >= 6)
         printf(" %d", p->trapframe->a5);
       printf(") ");
-    }
-    p->trapframe->a0 = syscalls[num]();
-    if (tracing)
       printf("-> %d\n", p->trapframe->a0);
+    }
+    // p->trapframe->a0 = syscalls[num]();
     /*DOS END*/
   }
   else
