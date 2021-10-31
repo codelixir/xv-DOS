@@ -166,6 +166,7 @@ sys_set_priority(void)
     {
       ret = p->stp;
       p->nice = 5;
+      p->ntime = 0;
       p->stp = np;
     }
   }

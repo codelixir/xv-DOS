@@ -127,6 +127,7 @@ struct proc
   uint ctime; // When was the process created
   uint etime; // When did the process exited
   uint stime; // How long the process was sleeping for
+  uint ntime; // nap time; time since the last sleep
   // procdump
   uint nrun; // number of times process is picked by scheduler
   // priority

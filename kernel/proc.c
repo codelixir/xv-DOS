@@ -157,6 +157,7 @@ found:
   p->ltime = 0;
   p->rtime = 0;
   p->stime = 0;
+  p->ntime = 0;
   p->etime = 0;
   p->ctime = ticks;
   // priority
@@ -536,6 +537,7 @@ void update_time()
     else if (p->state == SLEEPING)
     {
       p->stime++;
+      p->ntime++;
     }
     release(&p->lock);
   }
@@ -674,7 +676,7 @@ void scheduler(void)
         c->proc = 0;
       }
       release(&p_preffered->lock);
-      p_preffered->nice = (10 * p_preffered->stime) / (p_preffered->stime + p_preffered->rtime);
+      p_preffered->nice = (10 * p_preffered->ntime) / (p_preffered->ntime + p_preffered->rtime);
     }
   }
 #else
