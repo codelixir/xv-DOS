@@ -5,7 +5,7 @@
 **xv**6 - **D**ependent **O**perating **S**ystem
 
 An extension of the MIT's xv6 Operating System in RISC-V. \
-Read the original readme [here](files/README). The original code can be found in the [riscv](./tree/riscv) branch.
+Read the original readme [here](files/README). The original code can be found in the [riscv](https://github.com/codelixir/xv-DOS/tree/riscv) branch.
 
 ## Running the OS
 
