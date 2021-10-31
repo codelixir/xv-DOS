@@ -16,3 +16,5 @@ kernel/kernel
 user/usys.S
 .gdbinit
 .vscode
+*.svg
+.DS_Store
