@@ -32,7 +32,7 @@ int main()
 #ifndef FCFS
             }
 #endif
-            printf("Process %d finished", n);
+            printf("Process %d finished\n", n);
             exit(0);
         }
         else
