@@ -6,6 +6,9 @@
 #include "proc.h"
 #include "defs.h"
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -149,6 +152,18 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+
+  // time
+  p->ltime = 0;
+  p->rtime = 0;
+  p->stime = 0;
+  p->ntime = 0;
+  p->etime = 0;
+  p->ctime = ticks;
+  // priority
+  p->nice = 5;
+  p->stp = 60;
+  p->nrun = 0;
 
   return p;
 }
@@ -389,6 +404,7 @@ void exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+  p->etime = ticks;
 
   release(&wait_lock);
 
@@ -451,6 +467,82 @@ int wait(uint64 addr)
   }
 }
 
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int waitx(uint64 addr, uint *rtime, uint *wtime)
+{
+  struct proc *np;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for (;;)
+  {
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for (np = proc; np < &proc[NPROC]; np++)
+    {
+      if (np->parent == p)
+      {
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&np->lock);
+
+        havekids = 1;
+        if (np->state == ZOMBIE)
+        {
+          // Found one.
+          pid = np->pid;
+          *rtime = np->rtime;
+          *wtime = np->etime - np->ctime - np->rtime;
+          if (addr != 0 && copyout(p->pagetable, addr, (char *)&np->xstate,
+                                   sizeof(np->xstate)) < 0)
+          {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(np);
+          release(&np->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&np->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if (!havekids || p->killed)
+    {
+      release(&wait_lock);
+      return -1;
+    }
+
+    // Wait for a child to exit.
+    sleep(p, &wait_lock); //DOC: wait-sleep
+  }
+}
+
+void update_time()
+{
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    p->ltime++;
+    if (p->state == RUNNING)
+    {
+      p->rtime++;
+    }
+    else if (p->state == SLEEPING)
+    {
+      p->stime++;
+      p->ntime++;
+    }
+    release(&p->lock);
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -462,8 +554,10 @@ void scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-
   c->proc = 0;
+
+#ifdef RR
+  printf("scheduler: RR\n"); // DEBUG
   for (;;)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -488,6 +582,106 @@ void scheduler(void)
       release(&p->lock);
     }
   }
+
+#elif defined(FCFS)
+  printf("scheduler: FCFS\n"); // DEBUG
+  struct proc *p_least_time = proc;
+  for (;;)
+  {
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
+
+    // minimum time
+    int found = 0;
+    int min_ticks = -1;
+
+    for (p = proc; p < &proc[NPROC]; p++)
+    {
+      // find the process with the least time
+      if (p->state == RUNNABLE)
+      {
+        if (!found)
+        {
+          min_ticks = p->ctime;
+          p_least_time = p;
+          found = 1;
+        }
+        if (p->ctime < min_ticks)
+        {
+          min_ticks = p->ctime;
+          p_least_time = p;
+        }
+      }
+
+      acquire(&p_least_time->lock);
+      if (p_least_time->state == RUNNABLE)
+      {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p_least_time->state = RUNNING;
+        c->proc = p_least_time;
+        swtch(&c->context, &p_least_time->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p_least_time->lock);
+    }
+  }
+#elif defined(PBS)
+  printf("scheduler: PBS\n"); // DEBUG
+  struct proc *p_preffered = proc;
+  for (;;)
+  {
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
+
+    // minimum time
+    int found = 0;
+    int min_dyp = -1;
+
+    for (p = proc; p < &proc[NPROC]; p++)
+    {
+      // find the process with the least time
+      if (p->state == RUNNABLE)
+      {
+        if (!found)
+        {
+          min_dyp = max(0, min(p->stp - p->nice + 5, 100));
+          p_preffered = p;
+          found = 1;
+        }
+        if (p->ctime < min_dyp)
+        {
+          min_dyp = max(0, min(p->stp - p->nice + 5, 100));
+          p_preffered = p;
+        }
+      }
+
+      acquire(&p_preffered->lock);
+      if (p_preffered->state == RUNNABLE)
+      {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p_preffered->state = RUNNING;
+        p_preffered->nrun++;
+        c->proc = p_preffered;
+        swtch(&c->context, &p_preffered->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p_preffered->lock);
+      p_preffered->nice = (10 * p_preffered->ntime) / (p_preffered->ntime + p_preffered->rtime);
+    }
+  }
+#else
+  printf("scheduler: ERROR\n");
+#endif
 }
 
 // Switch to scheduler.  Must hold only p->lock
@@ -680,7 +874,11 @@ void procdump(void)
       state = states[p->state];
     else
       state = "???";
+#ifdef PBS
+    printf("%d %d %s %d %d %d", p->pid, max(0, min(p->stp - p->nice + 5, 100)), state, p->rtime, p->ltime - p->rtime - p->stime, p->nrun);
+#else
     printf("%d %s %s", p->pid, state, p->name);
+#endif
     printf("\n");
   }
 }

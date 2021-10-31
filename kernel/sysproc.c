@@ -127,3 +127,49 @@ sys_trace(void)
 }
 
 // const cinfo info_trace = {.name = "trace", .argc = 0};
+
+uint64
+sys_waitx(void)
+{
+  uint64 addr, addr1, addr2;
+  uint wtime, rtime;
+  if (argaddr(0, &addr) < 0)
+    return -1;
+  if (argaddr(1, &addr1) < 0) // user virtual memory
+    return -1;
+  if (argaddr(2, &addr2) < 0)
+    return -1;
+  int ret = waitx(addr, &wtime, &rtime);
+  struct proc *p = myproc();
+  if (copyout(p->pagetable, addr1, (char *)&wtime, sizeof(int)) < 0)
+    return -1;
+  if (copyout(p->pagetable, addr2, (char *)&rtime, sizeof(int)) < 0)
+    return -1;
+  return ret;
+}
+
+uint64
+sys_set_priority(void)
+{
+  int np, pid, ret = -1;
+  struct proc *p;
+  extern struct proc proc[];
+
+  if (argint(0, &np) < 0)
+    return -1;
+  if (argint(1, &pid) < 0)
+    return -1;
+
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    if (p->pid == pid)
+    {
+      ret = p->stp;
+      p->nice = 5;
+      p->ntime = 0;
+      p->stp = np;
+    }
+  }
+
+  return ret;
+}
