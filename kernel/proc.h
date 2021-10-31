@@ -122,6 +122,7 @@ struct proc
   // strace
   int trace_mask; // mask from system call (0 by default)
   // time
+  uint ltime; // Total lifetime of the process
   uint rtime; // How long the process ran for
   uint ctime; // When was the process created
   uint etime; // When did the process exited

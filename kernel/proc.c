@@ -154,6 +154,7 @@ found:
   p->context.sp = p->kstack + PGSIZE;
 
   // time
+  p->ltime = 0;
   p->rtime = 0;
   p->stime = 0;
   p->etime = 0;
@@ -527,6 +528,7 @@ void update_time()
   for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
+    p->ltime++;
     if (p->state == RUNNING)
     {
       p->rtime++;
@@ -663,6 +665,7 @@ void scheduler(void)
         // to release its lock and then reacquire it
         // before jumping back to us.
         p_preffered->state = RUNNING;
+        p_preffered->nrun++;
         c->proc = p_preffered;
         swtch(&c->context, &p_preffered->context);
 
@@ -674,6 +677,8 @@ void scheduler(void)
       p_preffered->nice = (10 * p_preffered->stime) / (p_preffered->stime + p_preffered->rtime);
     }
   }
+#else
+  printf("scheduler: ERROR\n");
 #endif
 }
 
@@ -867,7 +872,11 @@ void procdump(void)
       state = states[p->state];
     else
       state = "???";
+#ifdef PBS
+    printf("%d %d %s %d %d %d", p->pid, max(0, min(p->stp - p->nice + 5, 100)), state, p->rtime, p->ltime - p->rtime - p->stime, p->nrun);
+#else
     printf("%d %s %s", p->pid, state, p->name);
+#endif
     printf("\n");
   }
 }
