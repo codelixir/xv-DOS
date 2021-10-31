@@ -4,8 +4,6 @@
 
 void strace(int mask, char *command, char *args[])
 {
-    // exec(command, args);
-
     int pid = fork();
 
     if (pid == 0)

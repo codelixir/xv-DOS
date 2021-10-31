@@ -53,6 +53,7 @@ void procinit(void)
   for (p = proc; p < &proc[NPROC]; p++)
   {
     initlock(&p->lock, "proc");
+    p->trace_mask = 0;
     p->kstack = KSTACK((int)(p - proc));
   }
 }
