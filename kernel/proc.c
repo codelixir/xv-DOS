@@ -6,6 +6,9 @@
 #include "proc.h"
 #include "defs.h"
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -126,7 +129,6 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
-  p->n_ticks = ticks;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0)
@@ -150,9 +152,16 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+
+  // time
   p->rtime = 0;
+  p->stime = 0;
   p->etime = 0;
   p->ctime = ticks;
+  // priority
+  p->nice = 5;
+  p->stp = 60;
+  p->nrun = 0;
 
   return p;
 }
@@ -522,6 +531,10 @@ void update_time()
     {
       p->rtime++;
     }
+    else if (p->state == SLEEPING)
+    {
+      p->stime++;
+    }
     release(&p->lock);
   }
 }
@@ -540,6 +553,7 @@ void scheduler(void)
   c->proc = 0;
 
 #ifdef RR
+  printf("scheduler: RR\n"); // DEBUG
   for (;;)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -566,6 +580,7 @@ void scheduler(void)
   }
 
 #elif defined(FCFS)
+  printf("scheduler: FCFS\n"); // DEBUG
   struct proc *p_least_time = proc;
   for (;;)
   {
@@ -583,13 +598,13 @@ void scheduler(void)
       {
         if (!found)
         {
-          min_ticks = p->n_ticks;
+          min_ticks = p->ctime;
           p_least_time = p;
           found = 1;
         }
-        if (p->n_ticks < min_ticks)
+        if (p->ctime < min_ticks)
         {
-          min_ticks = p->n_ticks;
+          min_ticks = p->ctime;
           p_least_time = p;
         }
       }
@@ -609,6 +624,54 @@ void scheduler(void)
         c->proc = 0;
       }
       release(&p_least_time->lock);
+    }
+  }
+#elif defined(PBS)
+  printf("scheduler: PBS\n"); // DEBUG
+  struct proc *p_preffered = proc;
+  for (;;)
+  {
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
+
+    // minimum time
+    int found = 0;
+    int min_dyp = -1;
+
+    for (p = proc; p < &proc[NPROC]; p++)
+    {
+      // find the process with the least time
+      if (p->state == RUNNABLE)
+      {
+        if (!found)
+        {
+          min_dyp = max(0, min(p->stp - p->nice + 5, 100));
+          p_preffered = p;
+          found = 1;
+        }
+        if (p->ctime < min_dyp)
+        {
+          min_dyp = max(0, min(p->stp - p->nice + 5, 100));
+          p_preffered = p;
+        }
+      }
+
+      acquire(&p_preffered->lock);
+      if (p_preffered->state == RUNNABLE)
+      {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p_preffered->state = RUNNING;
+        c->proc = p_preffered;
+        swtch(&c->context, &p_preffered->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p_preffered->lock);
+      p_preffered->nice = (10 * p_preffered->stime) / (p_preffered->stime + p_preffered->rtime);
     }
   }
 #endif

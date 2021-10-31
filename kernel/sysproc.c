@@ -147,3 +147,28 @@ sys_waitx(void)
     return -1;
   return ret;
 }
+
+uint64
+sys_set_priority(void)
+{
+  int np, pid, ret = -1;
+  struct proc *p;
+  extern struct proc proc[];
+
+  if (argint(0, &np) < 0)
+    return -1;
+  if (argint(1, &pid) < 0)
+    return -1;
+
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    if (p->pid == pid)
+    {
+      ret = p->stp;
+      p->nice = 5;
+      p->stp = np;
+    }
+  }
+
+  return ret;
+}

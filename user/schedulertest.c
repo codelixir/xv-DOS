@@ -38,7 +38,7 @@ int main()
         else
         {
 #ifdef PBS
-            setpriority(80, pid); // Will only matter for PBS, set lower priority for IO bound processes
+            set_priority(80, pid); // Will only matter for PBS, set lower priority for IO bound processes
 #endif
         }
     }
