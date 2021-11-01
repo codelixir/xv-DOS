@@ -7,6 +7,10 @@
 An extension of the [MIT](https://github.com/mit-pdos)'s [xv6 Operating System for RISC-V](https://github.com/mit-pdos/xv6-riscv). \
 Read the original readme [here](files/README). The original code (at the time of the fork) can be found in the [riscv](https://github.com/codelixir/xv-DOS/tree/riscv) branch. 
 
+## Installation
+
+You can follow the install instructions [here](https://pdos.csail.mit.edu/6.S081/2020/tools.html). (Skip the Athena part)
+
 
 ## Running the OS
 
@@ -64,12 +68,12 @@ Since this is non-preempted, a condition is added to ignore the yield() when FCF
 
 Instead of time, we compare the priorities. Static priority (default to 60) can be changed (explained below) by the user. Dynamic priority is calculated and compared:
 
-```
+```c
 dynamic_pr = max(0, min(100, static_pr - niceness + 5))
 ```
 
 where niceness is defined as
-```
+```c
 10*(ntime)/(ntime+rtime)
 ```
 
