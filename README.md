@@ -15,6 +15,7 @@ You can follow the install instructions [here](https://pdos.csail.mit.edu/6.S081
 ## Running the OS
 
 ```sh
+$ make clean
 $ make qemu SCHEDULER=[RR/PBS/FCFS] CPUS=[N_CPU]
 ```
 
